@@ -193,7 +193,6 @@ def llm_chat(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = 512,
-    temperature: float = 0.2,
 ) -> str:
     if provider == "OpenAI":
         try:
@@ -203,7 +202,6 @@ def llm_chat(
                 "Install OpenAI client: pip install openai"
             ) from e
         client = OpenAI(api_key=api_key)
-        # Build request kwargs - GPT-5 models don't support temperature parameter
         kwargs = {
             "model": model,
             "messages": [
@@ -212,10 +210,6 @@ def llm_chat(
             ],
             "max_completion_tokens": max_tokens,
         }
-        
-        # Only include temperature for models that support it (not GPT-5 series)
-        if not any(gpt5_model in model for gpt5_model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]):
-            kwargs["temperature"] = temperature
         
         resp = client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content.strip()
@@ -286,7 +280,6 @@ def llm_label_cluster(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         max_tokens=LLMConfig.MAX_TOKENS_FOR_LABEL,
-        temperature=LLMConfig.TEMPERATURE_CREATIVE,
     )
 
 
@@ -742,7 +735,6 @@ def run_cluster_qa(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=LLMConfig.MAX_TOKENS_FOR_QA,
-                temperature=LLMConfig.DEFAULT_TEMPERATURE,
             )
             # Use safe JSON parsing with required keys validation
             parsed = parse_llm_json_response(
@@ -885,7 +877,6 @@ def run_keyword_qa(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=128,
-                temperature=LLMConfig.DEFAULT_TEMPERATURE,
             )
             parsed = parse_llm_json_response(raw, required_keys=["topics"])
             topics = parsed.get("topics", [])
