@@ -673,7 +673,10 @@ def main():
             n_clusters = st.slider("Number of clusters", 5, 100, 30)
             
             clustering_method = st.radio("Clustering method", 
-                                        ["TF-IDF", "Semantic (OpenAI)", "Semantic (Gemini)"])
+                                        ["TF-IDF Only", "Semantic Only (OpenAI)", "Semantic Only (Gemini)", 
+                                         "Both: TF-IDF + Semantic (OpenAI)", "Both: TF-IDF + Semantic (Gemini)"])
+            
+            st.info("💡 'Both' option runs two separate analyses for comparison")
             
             use_llm_labels = st.checkbox("Generate LLM labels for clusters", value=True)
             
@@ -696,10 +699,33 @@ def main():
             
             if provider == 'openai':
                 api_key = st.text_input("OpenAI API Key", type="password")
-                model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"])
+                
+                # Common models as suggestions
+                common_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini"]
+                model_selection = st.selectbox("Select or enter model", 
+                                              ["Custom (type below)"] + common_models)
+                
+                if model_selection == "Custom (type below)":
+                    model = st.text_input("Enter OpenAI model name", 
+                                        value="gpt-4o-mini",
+                                        help="e.g., gpt-4o, gpt-4o-mini, o1, o1-mini")
+                else:
+                    model = model_selection
+                
             else:
                 api_key = st.text_input("Gemini API Key", type="password")
-                model = st.selectbox("Model", ["gemini-1.5-flash", "gemini-1.5-pro"])
+                
+                # Common Gemini models
+                common_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-exp-1206"]
+                model_selection = st.selectbox("Select or enter model", 
+                                              ["Custom (type below)"] + common_models)
+                
+                if model_selection == "Custom (type below)":
+                    model = st.text_input("Enter Gemini model name", 
+                                        value="gemini-1.5-flash",
+                                        help="e.g., gemini-1.5-flash, gemini-2.0-flash-exp")
+                else:
+                    model = model_selection
             
             st.markdown("---")
             run_analysis = st.button("🚀 Run Analysis", type="primary")
@@ -715,26 +741,85 @@ def main():
         # Store results in session state
         with st.spinner("Running analysis..."):
             
+            # Initialize variables
+            run_both = False
+            phrases_df_tfidf = None
+            phrases_df_semantic = None
+            phrases_comparison = None
+            
             # PASS 1: Topical Discovery
             st.header("📊 Pass 1: Topical Discovery")
             
             phrases_df = extract_topical_phrases(df, keyword_col, min_phrase_freq, max_ngram)
             
-            if clustering_method == "TF-IDF":
-                phrases_df = cluster_phrases_tfidf(phrases_df, n_clusters)
-            elif clustering_method == "Semantic (OpenAI)":
-                phrases_df = cluster_phrases_semantic(phrases_df, n_clusters, 'openai', api_key)
+            # Determine if we're running both methods
+            run_both = "Both:" in clustering_method
+            
+            if run_both:
+                # Run both TF-IDF and Semantic
+                st.info("🔄 Running BOTH TF-IDF and Semantic clustering for comparison...")
+                
+                # TF-IDF clustering
+                st.subheader("Method 1: TF-IDF Clustering")
+                phrases_df_tfidf = phrases_df.copy()
+                phrases_df_tfidf = cluster_phrases_tfidf(phrases_df_tfidf, n_clusters)
+                
+                if use_llm_labels and api_key:
+                    phrases_df_tfidf = label_clusters_with_llm(phrases_df_tfidf, provider, api_key, model)
+                
+                # Semantic clustering
+                st.subheader("Method 2: Semantic Clustering")
+                phrases_df_semantic = phrases_df.copy()
+                semantic_provider = 'openai' if 'OpenAI' in clustering_method else 'gemini'
+                phrases_df_semantic = cluster_phrases_semantic(phrases_df_semantic, n_clusters, semantic_provider, api_key)
+                
+                if phrases_df_semantic is None:
+                    st.error("❌ Semantic clustering failed, using TF-IDF results only")
+                    phrases_df = phrases_df_tfidf
+                    run_both = False
+                else:
+                    if use_llm_labels and api_key:
+                        phrases_df_semantic = label_clusters_with_llm(phrases_df_semantic, provider, api_key, model)
+                
+                # Store both results
+                if run_both:
+                    # Rename columns to distinguish
+                    phrases_df_tfidf = phrases_df_tfidf.rename(columns={
+                        'Cluster': 'Cluster_TFIDF',
+                        'Cluster_Preview': 'Cluster_Preview_TFIDF',
+                        'LLM_Label': 'LLM_Label_TFIDF'
+                    })
+                    phrases_df_semantic = phrases_df_semantic.rename(columns={
+                        'Cluster': 'Cluster_Semantic',
+                        'Cluster_Preview': 'Cluster_Preview_Semantic',
+                        'LLM_Label': 'LLM_Label_Semantic'
+                    })
+                    
+                    # For keywords tagging, we'll use semantic as primary
+                    phrases_df = phrases_df_semantic.copy()
+                    # But keep both for comparison
+                    phrases_comparison = phrases_df_tfidf.merge(
+                        phrases_df_semantic[['Phrase', 'Cluster_Semantic', 'Cluster_Preview_Semantic', 'LLM_Label_Semantic']], 
+                        on='Phrase', 
+                        how='outer'
+                    )
+            
             else:
-                phrases_df = cluster_phrases_semantic(phrases_df, n_clusters, 'gemini', api_key)
+                # Single method
+                if clustering_method == "TF-IDF Only":
+                    phrases_df = cluster_phrases_tfidf(phrases_df, n_clusters)
+                elif "Semantic" in clustering_method:
+                    semantic_provider = 'openai' if 'OpenAI' in clustering_method else 'gemini'
+                    phrases_df = cluster_phrases_semantic(phrases_df, n_clusters, semantic_provider, api_key)
+                    
+                    if phrases_df is None:
+                        st.error("❌ Clustering failed")
+                        return
+                
+                if use_llm_labels and api_key:
+                    phrases_df = label_clusters_with_llm(phrases_df, provider, api_key, model)
             
-            if phrases_df is None:
-                st.error("❌ Clustering failed")
-                return
-            
-            if use_llm_labels and api_key:
-                phrases_df = label_clusters_with_llm(phrases_df, provider, api_key, model)
-            
-            # Tag keywords with topics
+            # Tag keywords with topics (using semantic if both were run)
             df = tag_keywords_with_topics(df, phrases_df, keyword_col)
             
             # PASS 2: Intent Discovery
@@ -761,55 +846,146 @@ def main():
         st.success("✅ Analysis complete!")
         
         # Display results in tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📊 Topics & Clusters", 
-            "🎯 Intent Phrases",
-            "📋 Enriched Keywords",
-            "🔍 Cluster QA",
-            "🔍 Keyword QA"
-        ])
-        
-        with tab1:
-            st.subheader("Topical Phrases & Clusters")
-            st.dataframe(phrases_df, use_container_width=True)
+        if run_both:
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                "📊 Topics Comparison", 
+                "📊 TF-IDF Topics",
+                "📊 Semantic Topics",
+                "🎯 Intent Phrases",
+                "📋 Enriched Keywords",
+                "🔍 QA Results"
+            ])
             
-            # Download button
-            csv = phrases_df.to_csv(index=False)
-            st.download_button("⬇️ Download Topics CSV", csv, "topics.csv", "text/csv")
-        
-        with tab2:
-            st.subheader("Intent Phrases")
-            st.dataframe(intent_df, use_container_width=True)
-            
-            csv = intent_df.to_csv(index=False)
-            st.download_button("⬇️ Download Intent CSV", csv, "intent.csv", "text/csv")
-        
-        with tab3:
-            st.subheader("Enriched Keywords")
-            st.dataframe(df, use_container_width=True)
-            
-            csv = df.to_csv(index=False)
-            st.download_button("⬇️ Download Keywords CSV", csv, "keywords_enriched.csv", "text/csv")
-        
-        with tab4:
-            if not qa_df.empty:
-                st.subheader("Cluster QA Results")
-                st.dataframe(qa_df, use_container_width=True)
+            with tab1:
+                st.subheader("🔬 TF-IDF vs Semantic Clustering Comparison")
+                st.markdown("""
+                Compare how the two methods cluster the same phrases. This helps you understand:
+                - Which method produces more coherent clusters
+                - Where the methods agree/disagree
+                - Which approach better suits your data
+                """)
                 
-                csv = qa_df.to_csv(index=False)
-                st.download_button("⬇️ Download Cluster QA CSV", csv, "cluster_qa.csv", "text/csv")
-            else:
-                st.info("Cluster QA was not enabled or produced no results")
-        
-        with tab5:
-            if not kw_qa_df.empty:
-                st.subheader("Keyword QA Results")
-                st.dataframe(kw_qa_df, use_container_width=True)
+                # Show comparison table
+                st.dataframe(phrases_comparison, use_container_width=True)
                 
-                csv = kw_qa_df.to_csv(index=False)
-                st.download_button("⬇️ Download Keyword QA CSV", csv, "keyword_qa.csv", "text/csv")
-            else:
-                st.info("Keyword QA was not enabled or produced no results")
+                csv = phrases_comparison.to_csv(index=False)
+                st.download_button("⬇️ Download Comparison CSV", csv, "comparison.csv", "text/csv")
+                
+                # Show agreement metrics
+                st.subheader("📊 Agreement Analysis")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # Count phrases where both methods put them in "similar" clusters
+                    # (This is a simplified heuristic)
+                    st.metric("Total Phrases", len(phrases_comparison))
+                
+                with col2:
+                    tfidf_clusters = phrases_comparison['Cluster_TFIDF'].nunique()
+                    st.metric("TF-IDF Clusters", tfidf_clusters)
+                
+                with col3:
+                    semantic_clusters = phrases_comparison['Cluster_Semantic'].nunique()
+                    st.metric("Semantic Clusters", semantic_clusters)
+            
+            with tab2:
+                st.subheader("TF-IDF Method Results")
+                st.dataframe(phrases_df_tfidf, use_container_width=True)
+                
+                csv = phrases_df_tfidf.to_csv(index=False)
+                st.download_button("⬇️ Download TF-IDF CSV", csv, "topics_tfidf.csv", "text/csv")
+            
+            with tab3:
+                st.subheader("Semantic Method Results")
+                st.dataframe(phrases_df_semantic, use_container_width=True)
+                
+                csv = phrases_df_semantic.to_csv(index=False)
+                st.download_button("⬇️ Download Semantic CSV", csv, "topics_semantic.csv", "text/csv")
+            
+            with tab4:
+                st.subheader("Intent Phrases")
+                st.dataframe(intent_df, use_container_width=True)
+                
+                csv = intent_df.to_csv(index=False)
+                st.download_button("⬇️ Download Intent CSV", csv, "intent.csv", "text/csv")
+            
+            with tab5:
+                st.subheader("Enriched Keywords (using Semantic clustering)")
+                st.dataframe(df, use_container_width=True)
+                
+                csv = df.to_csv(index=False)
+                st.download_button("⬇️ Download Keywords CSV", csv, "keywords_enriched.csv", "text/csv")
+            
+            with tab6:
+                if not qa_df.empty:
+                    st.subheader("Cluster QA Results")
+                    st.dataframe(qa_df, use_container_width=True)
+                    
+                    csv = qa_df.to_csv(index=False)
+                    st.download_button("⬇️ Download Cluster QA CSV", csv, "cluster_qa.csv", "text/csv")
+                
+                if not kw_qa_df.empty:
+                    st.markdown("---")
+                    st.subheader("Keyword QA Results")
+                    st.dataframe(kw_qa_df, use_container_width=True)
+                    
+                    csv = kw_qa_df.to_csv(index=False)
+                    st.download_button("⬇️ Download Keyword QA CSV", csv, "keyword_qa.csv", "text/csv")
+                
+                if qa_df.empty and kw_qa_df.empty:
+                    st.info("QA was not enabled or produced no results")
+        
+        else:
+            # Single method display (original tabs)
+            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                "📊 Topics & Clusters", 
+                "🎯 Intent Phrases",
+                "📋 Enriched Keywords",
+                "🔍 Cluster QA",
+                "🔍 Keyword QA"
+            ])
+            
+            with tab1:
+                st.subheader("Topical Phrases & Clusters")
+                st.dataframe(phrases_df, use_container_width=True)
+                
+                # Download button
+                csv = phrases_df.to_csv(index=False)
+                st.download_button("⬇️ Download Topics CSV", csv, "topics.csv", "text/csv")
+            
+            with tab2:
+                st.subheader("Intent Phrases")
+                st.dataframe(intent_df, use_container_width=True)
+                
+                csv = intent_df.to_csv(index=False)
+                st.download_button("⬇️ Download Intent CSV", csv, "intent.csv", "text/csv")
+            
+            with tab3:
+                st.subheader("Enriched Keywords")
+                st.dataframe(df, use_container_width=True)
+                
+                csv = df.to_csv(index=False)
+                st.download_button("⬇️ Download Keywords CSV", csv, "keywords_enriched.csv", "text/csv")
+            
+            with tab4:
+                if not qa_df.empty:
+                    st.subheader("Cluster QA Results")
+                    st.dataframe(qa_df, use_container_width=True)
+                    
+                    csv = qa_df.to_csv(index=False)
+                    st.download_button("⬇️ Download Cluster QA CSV", csv, "cluster_qa.csv", "text/csv")
+                else:
+                    st.info("Cluster QA was not enabled or produced no results")
+            
+            with tab5:
+                if not kw_qa_df.empty:
+                    st.subheader("Keyword QA Results")
+                    st.dataframe(kw_qa_df, use_container_width=True)
+                    
+                    csv = kw_qa_df.to_csv(index=False)
+                    st.download_button("⬇️ Download Keyword QA CSV", csv, "keyword_qa.csv", "text/csv")
+                else:
+                    st.info("Keyword QA was not enabled or produced no results")
 
 if __name__ == "__main__":
     main()
