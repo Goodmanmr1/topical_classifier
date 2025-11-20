@@ -782,26 +782,31 @@ def main():
                 
                 # Store both results
                 if run_both:
-                    # Rename columns to distinguish
-                    phrases_df_tfidf = phrases_df_tfidf.rename(columns={
+                    # Keep original semantic for tagging (with original column names)
+                    phrases_df = phrases_df_semantic.copy()
+                    
+                    # Now create renamed versions for comparison display
+                    phrases_df_tfidf_display = phrases_df_tfidf.rename(columns={
                         'Cluster': 'Cluster_TFIDF',
                         'Cluster_Preview': 'Cluster_Preview_TFIDF',
                         'LLM_Label': 'LLM_Label_TFIDF'
                     })
-                    phrases_df_semantic = phrases_df_semantic.rename(columns={
+                    phrases_df_semantic_display = phrases_df_semantic.rename(columns={
                         'Cluster': 'Cluster_Semantic',
                         'Cluster_Preview': 'Cluster_Preview_Semantic',
                         'LLM_Label': 'LLM_Label_Semantic'
                     })
                     
-                    # For keywords tagging, we'll use semantic as primary
-                    phrases_df = phrases_df_semantic.copy()
-                    # But keep both for comparison
-                    phrases_comparison = phrases_df_tfidf.merge(
-                        phrases_df_semantic[['Phrase', 'Cluster_Semantic', 'Cluster_Preview_Semantic', 'LLM_Label_Semantic']], 
+                    # Create comparison table with renamed columns
+                    phrases_comparison = phrases_df_tfidf_display.merge(
+                        phrases_df_semantic_display[['Phrase', 'Cluster_Semantic', 'Cluster_Preview_Semantic', 'LLM_Label_Semantic']], 
                         on='Phrase', 
                         how='outer'
                     )
+                    
+                    # Update the display dataframes
+                    phrases_df_tfidf = phrases_df_tfidf_display
+                    phrases_df_semantic = phrases_df_semantic_display
             
             else:
                 # Single method
