@@ -209,7 +209,7 @@ def llm_chat(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             temperature=temperature,
         )
         return resp.choices[0].message.content.strip()
