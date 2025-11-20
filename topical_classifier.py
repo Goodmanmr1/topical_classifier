@@ -203,7 +203,7 @@ def llm_chat(
                 "Install OpenAI client: pip install openai"
             ) from e
         client = OpenAI(api_key=api_key)
-        # GPT-5 models only support temperature=1, so don't pass temperature for newer models
+        # Build request kwargs - GPT-5 models don't support temperature parameter
         kwargs = {
             "model": model,
             "messages": [
@@ -213,8 +213,8 @@ def llm_chat(
             "max_completion_tokens": max_tokens,
         }
         
-        # Only include temperature if it's not using a GPT-5 model (which requires temperature=1)
-        if not model.startswith("gpt-5"):
+        # Only include temperature for models that support it (not GPT-5 series)
+        if not any(gpt5_model in model for gpt5_model in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]):
             kwargs["temperature"] = temperature
         
         resp = client.chat.completions.create(**kwargs)
