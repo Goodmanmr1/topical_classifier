@@ -279,7 +279,7 @@ Respond with ONLY a JSON object in this exact format (no other text):
                 client = openai.OpenAI(api_key=api_key)
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": prompt}]
                 )
                 response_text = response.choices[0].message.content
             
@@ -460,7 +460,7 @@ Respond with ONLY a JSON object (no markdown, no extra text):
                 client = openai.OpenAI(api_key=api_key)
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": prompt}]
                 )
                 response_text = response.choices[0].message.content
             
@@ -583,7 +583,7 @@ If no topics fit, return empty array."""
                 client = openai.OpenAI(api_key=api_key)
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": prompt}]
                 )
                 response_text = response.choices[0].message.content
             
@@ -698,16 +698,18 @@ def main():
                 api_key = st.text_input("OpenAI API Key", type="password")
                 
                 # Common models as suggestions
-                common_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini"]
+                common_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o1-preview"]
                 model_selection = st.selectbox("Select or enter model", 
                                               ["Custom (type below)"] + common_models)
                 
                 if model_selection == "Custom (type below)":
                     model = st.text_input("Enter OpenAI model name", 
                                         value="gpt-4o-mini",
-                                        help="e.g., gpt-4o, gpt-4o-mini, o1, o1-mini")
+                                        help="e.g., gpt-4o, gpt-4o-mini, o1, o1-mini, gpt-4o-2024-11-20")
                 else:
                     model = model_selection
+                
+                st.info("📘 Latest API: No temperature/max_tokens needed")
                 
             else:
                 api_key = st.text_input("Gemini API Key", type="password")
@@ -873,8 +875,6 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    # Count phrases where both methods put them in "similar" clusters
-                    # (This is a simplified heuristic)
                     st.metric("Total Phrases", len(phrases_comparison))
                 
                 with col2:
