@@ -203,15 +203,21 @@ def llm_chat(
                 "Install OpenAI client: pip install openai"
             ) from e
         client = OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
+        # GPT-5 models only support temperature=1, so don't pass temperature for newer models
+        kwargs = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_completion_tokens=max_tokens,
-            temperature=temperature,
-        )
+            "max_completion_tokens": max_tokens,
+        }
+        
+        # Only include temperature if it's not using a GPT-5 model (which requires temperature=1)
+        if not model.startswith("gpt-5"):
+            kwargs["temperature"] = temperature
+        
+        resp = client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content.strip()
 
     elif provider == "Gemini":
