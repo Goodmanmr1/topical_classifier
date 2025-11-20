@@ -280,7 +280,6 @@ Respond with ONLY a JSON object in this exact format (no other text):
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3
                 )
                 response_text = response.choices[0].message.content
             
@@ -462,7 +461,6 @@ Respond with ONLY a JSON object (no markdown, no extra text):
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3
                 )
                 response_text = response.choices[0].message.content
             
@@ -586,7 +584,6 @@ If no topics fit, return empty array."""
                 response = client.chat.completions.create(
                     model=model or "gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3
                 )
                 response_text = response.choices[0].message.content
             
